@@ -1,75 +1,80 @@
 #!/usr/bin/env python3
-"""Generic utilities for github org client.
-"""
-import requests
-from functools import wraps
-from typing import (
-    Mapping,
-    Sequence,
-    Any,
-    Dict,
-    Callable,
-)
-
-__all__ = [
-    "access_nested_map",
-    "get_json",
-    "memoize",
-]
+'''unittesting'''
+import unittest
+from parameterized import parameterized
+from typing import Dict, Union, Tuple
+from utils import access_nested_map, get_json, memoize
+from unittest.mock import Mock, patch
 
 
-def access_nested_map(nested_map: Mapping, path: Sequence) -> Any:
-    """Access nested map with key path.
-    Parameters
-    ----------
-    nested_map: Mapping
-        A nested map
-    path: Sequence
-        a sequence of key representing a path to the value
-    Example
-    -------
-    >>> nested_map = {"a": {"b": {"c": 1}}}
-    >>> access_nested_map(nested_map, ["a", "b", "c"])
-    1
-    """
-    for key in path:
-        if not isinstance(nested_map, Mapping):
-            raise KeyError(key)
-        nested_map = nested_map[key]
+class TestAccessNestedMap(unittest.TestCase):
+    '''Test for acces_nested_map function'''
 
-    return nested_map
+    @parameterized.expand([
+        ({'a': 1}, ('a',), 1),
+        ({'a': {'b': 2}}, ('a',), {'b': 2}),
+        ({'a': {'b': 2}}, ('a', 'b'), 2)
+    ])
+    def test_access_nested_map(self,
+                               nested_map: Dict,
+                               path: Tuple[str],
+                               expected: Union[Dict, int]) -> None:
+        '''Test access_nested_map'''
+        self.assertEqual(access_nested_map(nested_map, path), expected)
+
+    @parameterized.expand([
+        ({}, ('a',), KeyError),
+        ({'a': 1}, ('a', 'b'), KeyError)
+    ])
+    def test_access_nested_map_exception(self,
+                                         nested_map: Dict,
+                                         path: Tuple[str],
+                                         expected: Exception) -> None:
+        '''Test access_nested_map exception'''
+        with self.assertRaises(expected):
+            access_nested_map(nested_map, path)
 
 
-def get_json(url: str) -> Dict:
-    """Get JSON from remote URL.
-    """
-    response = requests.get(url)
-    return response.json()
+class TestGetJson(unittest.TestCase):
+    '''Testing get_json using mock'''
+
+    @parameterized.expand([
+        ("http://example.com", {'playload': True}),
+        ("http://holberton.io", {'playload': False})
+    ])
+    @patch("requests.get")
+    def test_get_json(self,
+                      test_url: str,
+                      test_playload: Dict,
+                      mock_get: Mock) -> None:
+        '''test get json'''
+        mock_response = Mock()
+        mock_response.json.return_value = test_playload
+        mock_get.return_value = mock_response
+        res = get_json(test_url)
+        mock_get.assert_called_once_with(test_url)
+        self.assertEqual(res, test_playload)
 
 
-def memoize(fn: Callable) -> Callable:
-    """Decorator to memoize a method.
-    Example
-    -------
-    class MyClass:
-        @memoize
-        def a_method(self):
-            print("a_method called")
-            return 42
-    >>> my_object = MyClass()
-    >>> my_object.a_method
-    a_method called
-    42
-    >>> my_object.a_method
-    42
-    """
-    attr_name = "_{}".format(fn.__name__)
+class TestMemoize(unittest.TestCase):
+    '''Testing memoization'''
+    def test_memoize(self):
+        '''Testing memoize'''
+        class TestClass:
 
-    @wraps(fn)
-    def memoized(self):
-        """"memoized wraps"""
-        if not hasattr(self, attr_name):
-            setattr(self, attr_name, fn(self))
-        return getattr(self, attr_name)
+            def a_method(self):
+                return 42
 
-    return property(memoized)
+            @memoize
+            def a_property(self):
+                return self.a_method()
+        test_class = TestClass()
+        with patch.object(TestClass, 'a_method',
+                          return_value=42) as mock_method:
+            res1 = test_class.a_property
+            res2 = test_class.a_property
+
+            self.assertEqual(res1, 42)
+            self.assertEqual(res2, 42)
+
+            mock_method.assert_called_once()
